@@ -9,7 +9,9 @@ Game::Game(const Window& window)
 
 	m_NrMelees{5}, m_RedMeleeEnemysVector{5}, m_GreenMeleeEnemysVector{ 5 }, explode{false}, m_ExplosionDuration{}, MAX_EXPLOSION_DURATION{3.f}, m_ExplosionOnCD{false}, m_LastExplosionElapsed{}, EXPLOSION_CD{10.f},
 
-	m_MenueState{MenueState::Start}
+	m_MenueState{MenueState::Start}, REVIVE_TIME{5.f}, m_CurrentReviveTime{}, m_NrRanged{3}, m_RedRangedEnemysVector{ 5 }, m_GreenRangedEnemysVector{ 5 }, RANGED_SPAWN_TIME{5.f}, m_TotalElapsedSec{},
+
+	m_RangedSpawn{false}, m_NrEnemiesDefeated{}, m_EndMessageSend{false}
 
 {
 	Initialize();
@@ -21,6 +23,8 @@ Game::Game(const Window& window)
 	{
 		m_GreenMeleeEnemysVector[counter]->SetActive();
 	}
+
+	
 
 	m_MC1Explosion = new Explosion(m_MainChar1);
 	m_MC2Explosion = new Explosion(m_MainChar2);
@@ -34,15 +38,26 @@ Game::~Game( )
 void Game::Initialize( )
 {
 
-	std::cout << "Made with azerty sorry :(\nRed:\nZ: Move Up\nQ: move Left\nS: Move down\nd: Move Right\n\nGreen:\nArrow keys to move\n\nA/E: Shrink/Grow\nR: When you see a white circle in the top middle of the screen -> Explode\nHitting enemies of the same colour defeats them while hitting enemies of the other colour makes you taek 1 dmg\nPress any of the controls to start";
+	std::cout << "Made with azerty sorry :(\nRed:\nZ: Move Up\nQ: move Left\nS: Move down\nd: Move Right\n\nGreen:\nArrow keys to move\n\nA/E: Shrink/Grow\nR: When you see a white circle in the top middle of the screen -> Explode\n\nHitting enemies of the same colour defeats them while hitting enemies of the other colour makes you take 1 dmg\n\nPress any of the controls to start\nIf game over Press space to restart\n";
+	std::cout << "\nIf one of you dies the other can revive them by staying on their body until the bar next to their hp is fully filled but be carefull a dead person can't take out enemies anymore";
 
 	m_SizeChange = m_MainChar1.radius / 4.f;
 	m_MinRadius = m_MainChar1.radius / 2.f + 1.f;
 	
 	m_SpeedChange = m_MainChar1Speed / 4.f;
 
+	//ranged
+	for (int counter{}; counter < m_NrRanged;++counter)
+	{
+		m_RedRangedEnemysVector[counter] = new RangedEnemy(7.5f, 75.f, 5.f, 100.f, Color4f{ 1.f,0.f,0.f,1.f });
+	}
+	for (int counter{}; counter < m_NrRanged; ++counter)
+	{
+		m_GreenRangedEnemysVector[counter] = new RangedEnemy(7.5f, 75.f, 5.f, 100.f, Color4f{ 0.f,1.f,0.f,1.f });
+	}
+
 	//melees
-	for (int counter{}; counter < m_NrMelees;++counter)
+	for (int counter{}; counter < m_NrMelees; ++counter)
 	{
 		m_RedMeleeEnemysVector[counter] = new MeleeEnemy(10.f, 50.f, Color4f{ 1.f,0.f,0.f,1.f });
 	}
@@ -65,12 +80,36 @@ void Game::Cleanup()
 	{
 		delete m_GreenMeleeEnemysVector[counter];
 	}
+
+	for (int counter{}; counter < m_NrRanged; ++counter)
+	{
+		delete m_RedRangedEnemysVector[counter];
+	}
+	for (int counter{}; counter < m_NrRanged; ++counter)
+	{
+		delete m_GreenRangedEnemysVector[counter];
+	}
 	delete m_MC1Explosion;
 	delete m_MC2Explosion;
 }
 
 void Game::Update( float elapsedSec )
 {
+
+	m_TotalElapsedSec += elapsedSec;
+	if (m_TotalElapsedSec > RANGED_SPAWN_TIME && m_RangedSpawn ==false)
+	{
+		m_RangedSpawn = true;
+		for (int counter{}; counter < m_NrRanged; ++counter)
+		{
+			m_RedRangedEnemysVector[counter]->SetActive();
+		}
+		for (int counter{}; counter < m_NrRanged; ++counter)
+		{
+			m_GreenRangedEnemysVector[counter]->SetActive();
+		}
+	}
+
 	if(m_MenueState == MenueState::Game)
 	{
 		if (explode)
@@ -98,28 +137,44 @@ void Game::Update( float elapsedSec )
 		//melees
 		UpdateMelees(elapsedSec);
 
+		//Ranged
+		UpdateRanged(elapsedSec);
+
 		m_MC1Explosion->Update(elapsedSec, m_MainChar1, explode);
 		m_MC2Explosion->Update(elapsedSec, m_MainChar2, explode);
 	}
 
+	if (m_AliveState == AliveState::Neither)
+	{
+		m_MenueState = MenueState::GameOver;
+		if(!m_EndMessageSend)
+		{
+			std::cout << "GAME OVER\n" << m_NrEnemiesDefeated << "enemies defeated\n";
+			m_EndMessageSend = true;
+		}
+	}
 }
 
 void Game::UpdateMainChars( float elapsedSec)
 {
-	switch (m_MainChar1State)
+
+	if (m_AliveState == AliveState::Both || m_AliveState == AliveState::Green)
 	{
-	case MovementState::Up:
-		m_MainChar1.center.y += m_MainChar1Speed * elapsedSec;
-		break;
-	case MovementState::Down:
-		m_MainChar1.center.y -= m_MainChar1Speed * elapsedSec;
-		break;
-	case MovementState::Left:
-		m_MainChar1.center.x -= m_MainChar1Speed * elapsedSec;
-		break;
-	case MovementState::Right:
-		m_MainChar1.center.x += m_MainChar1Speed * elapsedSec;
-		break;
+		switch (m_MainChar1State)
+		{
+		case MovementState::Up:
+			m_MainChar1.center.y += m_MainChar1Speed * elapsedSec;
+			break;
+		case MovementState::Down:
+			m_MainChar1.center.y -= m_MainChar1Speed * elapsedSec;
+			break;
+		case MovementState::Left:
+			m_MainChar1.center.x -= m_MainChar1Speed * elapsedSec;
+			break;
+		case MovementState::Right:
+			m_MainChar1.center.x += m_MainChar1Speed * elapsedSec;
+			break;
+		}
 	}
 
 	if (m_MainChar1.center.x - m_MainChar1.radius < GetViewPort().left)
@@ -139,20 +194,23 @@ void Game::UpdateMainChars( float elapsedSec)
 		m_MainChar1.center.y = GetViewPort().bottom + GetViewPort().height - m_MainChar1.radius;
 	}
 
-	switch (m_MainChar2State)
+	if (m_AliveState == AliveState::Both || m_AliveState == AliveState::Red)
 	{
-	case MovementState::Up:
-		m_MainChar2.center.y += m_MainChar2Speed * elapsedSec;
-		break;
-	case MovementState::Down:
-		m_MainChar2.center.y -= m_MainChar2Speed * elapsedSec;
-		break;
-	case MovementState::Left:
-		m_MainChar2.center.x -= m_MainChar2Speed * elapsedSec;
-		break;
-	case MovementState::Right:
-		m_MainChar2.center.x += m_MainChar2Speed * elapsedSec;
-		break;
+		switch (m_MainChar2State)
+		{
+		case MovementState::Up:
+			m_MainChar2.center.y += m_MainChar2Speed * elapsedSec;
+			break;
+		case MovementState::Down:
+			m_MainChar2.center.y -= m_MainChar2Speed * elapsedSec;
+			break;
+		case MovementState::Left:
+			m_MainChar2.center.x -= m_MainChar2Speed * elapsedSec;
+			break;
+		case MovementState::Right:
+			m_MainChar2.center.x += m_MainChar2Speed * elapsedSec;
+			break;
+		}
 	}
 
 	if (m_MainChar2.center.x - m_MainChar2.radius < GetViewPort().left)
@@ -171,6 +229,31 @@ void Game::UpdateMainChars( float elapsedSec)
 	{
 		m_MainChar2.center.y = GetViewPort().bottom + GetViewPort().height - m_MainChar2.radius;
 	}
+
+	if (m_AliveState != AliveState::Both&&m_AliveState != AliveState::Neither)
+	{
+		float xDistance{ m_MainChar1.center.x - m_MainChar2.center.x };
+		float yDistance{ m_MainChar1.center.y - m_MainChar2.center.y };
+		float Distance{ float(sqrt(xDistance * xDistance + yDistance * yDistance)) };
+
+		if (Distance < m_MainChar1.radius + m_MainChar2.radius)
+		{
+			m_CurrentReviveTime += elapsedSec;
+			if (m_CurrentReviveTime > REVIVE_TIME)
+			{
+				if (m_CurrentHpRed <= 0)
+				{
+					m_CurrentHpRed = 5;
+				}
+				if  (m_CurrentHpGreen <= 0)
+				{
+					m_CurrentHpGreen = 5;
+				}
+				m_AliveState = AliveState::Both;
+				m_CurrentReviveTime = 0.f;
+			}
+		}
+	}
 }
 
 void Game::UpdateMelees(float elapsedSec)
@@ -183,11 +266,13 @@ void Game::UpdateMelees(float elapsedSec)
 
 	for (int counter{}; counter < m_NrMelees; ++counter)
 	{
-		if (m_RedMeleeEnemysVector[counter]->CheckHit(m_MainChar2)||
+		if (m_RedMeleeEnemysVector[counter]->CheckHit(m_MainChar2)&&m_AliveState==AliveState::Both||
+			m_RedMeleeEnemysVector[counter]->CheckHit(m_MainChar2) && m_AliveState == AliveState::Red||
 			m_RedMeleeEnemysVector[counter]->CheckHit(m_MC1Explosion->GetHitBox())|| 
 			m_RedMeleeEnemysVector[counter]->CheckHit(m_MC2Explosion->GetHitBox()))
 		{
 			m_RedMeleeEnemysVector[counter]->Reset();
+			++m_NrEnemiesDefeated;
 		}
 		if (m_RedMeleeEnemysVector[counter]->CheckHit(m_MainChar1))
 		{
@@ -215,16 +300,119 @@ void Game::UpdateMelees(float elapsedSec)
 
 	for (int counter{}; counter < m_NrMelees; ++counter)
 	{
-		if (m_GreenMeleeEnemysVector[counter]->CheckHit(m_MainChar1)|| 
+		if (m_GreenMeleeEnemysVector[counter]->CheckHit(m_MainChar1)&&m_AliveState==AliveState::Both|| 
+			m_GreenMeleeEnemysVector[counter]->CheckHit(m_MainChar1) && m_AliveState == AliveState::Green||
 			m_GreenMeleeEnemysVector[counter]->CheckHit(m_MC1Explosion->GetHitBox()) ||
 			m_GreenMeleeEnemysVector[counter]->CheckHit(m_MC2Explosion->GetHitBox()))
 		{
 			m_GreenMeleeEnemysVector[counter]->Reset();
+			++m_NrEnemiesDefeated;
 		}
 		if (m_GreenMeleeEnemysVector[counter]->CheckHit(m_MainChar2))
 		{
 			m_CurrentHpRed -= 1;
 			m_GreenMeleeEnemysVector[counter]->Reset();
+			if (m_CurrentHpRed <= 0)
+			{
+				if (m_AliveState == AliveState::Both)
+				{
+					m_AliveState = AliveState::Green;
+				}
+				if (m_AliveState == AliveState::Red)
+				{
+					m_AliveState = AliveState::Neither;
+				}
+			}
+		}
+	}
+}
+
+void Game::UpdateRanged(float elapsedSec)
+{
+	//red
+	for (int counter{}; counter < m_NrRanged; ++counter)
+	{
+		m_RedRangedEnemysVector[counter]->Update(m_MainChar1.center, elapsedSec);
+	}
+
+	for (int counter{}; counter < m_NrRanged; ++counter)
+	{
+		if (m_RedRangedEnemysVector[counter]->CheckHitBody(m_MainChar2) && m_AliveState == AliveState::Both ||
+			m_RedRangedEnemysVector[counter]->CheckHitBody(m_MainChar2) && m_AliveState == AliveState::Red ||
+			m_RedRangedEnemysVector[counter]->CheckHitBody(m_MC1Explosion->GetHitBox()) ||
+			m_RedRangedEnemysVector[counter]->CheckHitBody(m_MC2Explosion->GetHitBox()))
+		{
+			m_RedRangedEnemysVector[counter]->Reset();
+			++m_NrEnemiesDefeated;
+		}
+		if (m_RedRangedEnemysVector[counter]->CheckHitBody(m_MainChar1))
+		{
+			m_CurrentHpGreen -= 1;
+			m_RedRangedEnemysVector[counter]->Reset();
+			if (m_CurrentHpGreen <= 0)
+			{
+				if (m_AliveState == AliveState::Both)
+				{
+					m_AliveState = AliveState::Red;
+				}
+				if (m_AliveState == AliveState::Green)
+				{
+					m_AliveState = AliveState::Neither;
+				}
+			}
+		}
+		if (m_RedRangedEnemysVector[counter]->CheckHitBullet(m_MainChar1))
+		{
+			m_CurrentHpGreen -= 1;
+			if (m_CurrentHpGreen <= 0)
+			{
+				if (m_AliveState == AliveState::Both)
+				{
+					m_AliveState = AliveState::Red;
+				}
+				if (m_AliveState == AliveState::Green)
+				{
+					m_AliveState = AliveState::Neither;
+				}
+			}
+		}
+	}
+
+	//green
+	for (int counter{}; counter < m_NrRanged; ++counter)
+	{
+		m_GreenRangedEnemysVector[counter]->Update(m_MainChar2.center, elapsedSec);
+	}
+
+	for (int counter{}; counter < m_NrRanged; ++counter)
+	{
+		if (m_GreenRangedEnemysVector[counter]->CheckHitBody(m_MainChar1) && m_AliveState == AliveState::Both ||
+			m_GreenRangedEnemysVector[counter]->CheckHitBody(m_MainChar1) && m_AliveState == AliveState::Green ||
+			m_GreenRangedEnemysVector[counter]->CheckHitBody(m_MC1Explosion->GetHitBox()) ||
+			m_GreenRangedEnemysVector[counter]->CheckHitBody(m_MC2Explosion->GetHitBox()))
+		{
+			m_GreenRangedEnemysVector[counter]->Reset();
+			++m_NrEnemiesDefeated;
+		}
+		if (m_GreenRangedEnemysVector[counter]->CheckHitBody(m_MainChar2))
+		{
+			m_CurrentHpRed -= 1;
+			m_GreenRangedEnemysVector[counter]->Reset();
+			if (m_CurrentHpRed <= 0)
+			{
+				if (m_AliveState == AliveState::Both)
+				{
+					m_AliveState = AliveState::Green;
+				}
+				if (m_AliveState == AliveState::Red)
+				{
+					m_AliveState = AliveState::Neither;
+				}
+			}
+		}
+		if (m_GreenRangedEnemysVector[counter]->CheckHitBullet(m_MainChar2))
+		{
+			m_CurrentHpRed -= 1;
 			if (m_CurrentHpRed <= 0)
 			{
 				if (m_AliveState == AliveState::Both)
@@ -247,17 +435,32 @@ void Game::Draw( ) const
 	m_MC1Explosion->Draw(explode);
 	m_MC2Explosion->Draw(explode);
 
-	DrawMainChars();
 
-	{
-		DrawEnemies();
-	}
+	DrawEnemies();
+	DrawMainChars();
 
 	DrawHp();
 }
 void Game::DrawMainChars() const
 {
 	
+	if (m_AliveState != AliveState::Both)
+	{
+		int drawPosX{};
+		if (m_CurrentHpGreen <= 0)
+		{
+			drawPosX = 40;
+		}
+		else
+		{
+			drawPosX = GetViewPort().width - 90;
+		}
+		Rectf reviveRect{ float(drawPosX), GetViewPort().height - 22, 50,10 };
+		Rectf currentReviveRect{float(drawPosX), GetViewPort().height - 22, 50 * m_CurrentReviveTime/REVIVE_TIME,10 };
+		utils::SetColor(Color4f{ 1.f,1.f,1.f,1.f });
+		utils::DrawRect(reviveRect);
+		utils::FillRect(currentReviveRect);
+	}
 
 	if(m_AliveState==AliveState::Both || m_AliveState==AliveState::Green)
 	{
@@ -274,6 +477,32 @@ void Game::DrawMainChars() const
 		utils::SetColor(Color4f{ 0.f, 0.f, 0.f, 1.f });
 		utils::DrawEllipse(m_MainChar2.center.x, m_MainChar2.center.y, m_MainChar2.radius /2, m_MainChar2.radius/2);
 	}
+
+	if (m_AliveState == AliveState::Green)
+	{
+		utils::SetColor(Color4f{ 1.f, 0.f, 0.f, 1.f });
+		utils::FillEllipse(m_MainChar2.center.x, m_MainChar2.center.y, m_MainChar2.radius, m_MainChar2.radius);
+		utils::SetColor(Color4f{ 0.f, 0.f, 0.f, 1.f });
+		utils::DrawLine(Point2f{ m_MainChar2.center.x - m_MainChar2.radius * 0.5f,m_MainChar2.center.y + m_MainChar2.radius * 0.5f },
+			Point2f{ m_MainChar2.center.x + m_MainChar2.radius * 0.5f, m_MainChar2.center.y - m_MainChar2.radius * 0.5f });
+
+		utils::DrawLine(Point2f{ m_MainChar2.center.x + m_MainChar2.radius * 0.5f,m_MainChar2.center.y + m_MainChar2.radius * 0.5f },
+			Point2f{ m_MainChar2.center.x - m_MainChar2.radius * 0.5f, m_MainChar2.center.y - m_MainChar2.radius * 0.5f });
+	}
+
+	if (m_AliveState == AliveState::Red)
+	{
+		utils::SetColor(Color4f{ 0.f, 1.f, 0.f, 1.f });
+		utils::FillEllipse(m_MainChar1.center.x, m_MainChar1.center.y, m_MainChar1.radius, m_MainChar1.radius);
+		utils::SetColor(Color4f{ 0.f, 0.f, 0.f, 1.f });
+		utils::DrawLine(Point2f{ m_MainChar1.center.x - m_MainChar1.radius * 0.5f,m_MainChar1.center.y + m_MainChar1.radius * 0.5f },
+			Point2f{ m_MainChar1.center.x + m_MainChar1.radius * 0.5f, m_MainChar1.center.y - m_MainChar1.radius * 0.5f });
+
+		utils::DrawLine(Point2f{ m_MainChar1.center.x + m_MainChar1.radius * 0.5f,m_MainChar1.center.y + m_MainChar1.radius * 0.5f },
+			Point2f{ m_MainChar1.center.x - m_MainChar1.radius * 0.5f, m_MainChar1.center.y - m_MainChar1.radius * 0.5f });
+	}
+
+	
 }
 void Game::DrawEnemies() const
 {
@@ -286,6 +515,17 @@ void Game::DrawEnemies() const
 	for (int counter{}; counter < m_NrMelees; ++counter)
 	{
 		m_GreenMeleeEnemysVector[counter]->Draw();
+	}
+
+	//ranged
+	for (int counter{}; counter < m_NrRanged; ++counter)
+	{
+		m_RedRangedEnemysVector[counter]->Draw();
+	}
+
+	for (int counter{}; counter < m_NrRanged; ++counter)
+	{
+		m_GreenRangedEnemysVector[counter]->Draw();
 	}
 }
 void Game::DrawHp() const
@@ -385,7 +625,7 @@ void Game::ProcessKeyDownEvent( const SDL_KeyboardEvent & e )
 
 void Game::ProcessKeyUpEvent( const SDL_KeyboardEvent& e )
 {
-	if(m_MenueState==MenueState::Game)
+	if(m_MenueState==MenueState::Game||m_MenueState==MenueState::GameOver)
 	{
 		if (m_AliveState == AliveState::Both)
 		{
@@ -438,7 +678,16 @@ void Game::ProcessKeyUpEvent( const SDL_KeyboardEvent& e )
 				m_RedMeleeEnemysVector[resetCounter]->Reset();
 
 			}
+			for (int resetCounter{}; resetCounter < m_NrRanged; ++resetCounter)
+			{
+				m_GreenRangedEnemysVector[resetCounter]->Reset();
+				m_RedRangedEnemysVector[resetCounter]->Reset();
+
+			}
+			m_AliveState = AliveState::Both;
 			m_MenueState = MenueState::Start;
+			m_NrEnemiesDefeated = 0;
+			m_EndMessageSend = false;
 			break;
 
 		}

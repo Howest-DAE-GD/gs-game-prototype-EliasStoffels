@@ -4,7 +4,7 @@
 #include <iostream>
 
 Explosion::Explosion(const Circlef& explosion):
-	m_Explosion{explosion}, m_Expansion{explosion.radius}, m_Opacity{1.f}
+	m_Explosion{explosion}, m_Expansion{explosion.radius*1.5f}, m_Opacity{1.f}
 {
 
 }
@@ -22,6 +22,7 @@ void Explosion::Draw(bool explode)
 
 void Explosion::Update(float elapsedSec, const Circlef& explosion, bool explode)
 {
+	m_Expansion = explosion.radius*1.5f;
 	if(explode)
 	{
 		m_Explosion.radius += m_Expansion * elapsedSec;
@@ -37,6 +38,6 @@ Circlef Explosion::GetHitBox()
 void Explosion::Reset(const Circlef& explosion)
 {
 	m_Explosion = explosion;
-	m_Expansion = m_Explosion.radius;
+	m_Expansion = m_Explosion.radius*1.5f;
 	m_Opacity = 1.0f;
 }

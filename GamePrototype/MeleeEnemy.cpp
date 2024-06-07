@@ -66,6 +66,15 @@ void MeleeEnemy::Reset()
 	}
 	else
 	{
-		m_Pos.y = 520.f;
+		int temp{ rand() % 2 };
+		if(temp == 0)
+		{
+			m_Pos.y = 520.f;
+		}
+		else
+		{
+			m_Pos.y = -20.f;
+		}
+	
 	}
 }

@@ -2,6 +2,7 @@
 #include "BaseGame.h"
 #include "MeleeEnemy.h"
 #include "Explosion.h"
+#include "RangedEnemy.h"
 
 class Game : public BaseGame
 {
@@ -32,6 +33,7 @@ private:
 	void ClearBackground( ) const;
 	void UpdateMainChars(float elapsedSec);
 	void UpdateMelees(float elapsedSec);
+	void UpdateRanged(float elapsedSec);
 	void DrawMainChars() const;
 	void DrawEnemies() const;
 	void DrawHp() const;
@@ -59,7 +61,15 @@ private:
 	float m_LastExplosionElapsed;
 	const float EXPLOSION_CD;
 
+	const float RANGED_SPAWN_TIME;
+	float m_TotalElapsedSec;
+	bool m_RangedSpawn;
+
+	const float REVIVE_TIME;
+	float m_CurrentReviveTime;
 	
+	int m_NrEnemiesDefeated;
+	bool m_EndMessageSend;
 
 	enum class MovementState
 	{
@@ -76,7 +86,7 @@ private:
 
 	enum class MenueState
 	{
-		Start, Game
+		Start, Game, GameOver
 	};
 
 	MenueState m_MenueState;
@@ -88,6 +98,10 @@ private:
 	std::vector<MeleeEnemy*> m_RedMeleeEnemysVector;
 	std::vector<MeleeEnemy*> m_GreenMeleeEnemysVector;
 
+	int m_NrRanged;
 	Explosion* m_MC1Explosion;
 	Explosion* m_MC2Explosion;
+
+	std::vector<RangedEnemy*> m_RedRangedEnemysVector;
+	std::vector<RangedEnemy*> m_GreenRangedEnemysVector;
 };
