@@ -67,7 +67,7 @@ void Game::Initialize( )
 	}
 
 
-	std::cout << GetViewPort().height << std::endl << GetViewPort().width;
+
 }
 
 void Game::Cleanup()
